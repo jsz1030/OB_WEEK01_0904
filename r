@@ -15,8 +15,8 @@
 * 수치형 변수: 각 변수의 중앙값으로 결측치 대체
 * 범주형 변수: 'missing'이라는 별도의 값으로 결측치 대체
 * 범주형 변수: pd.get_dummies()를 사용하여 One-Hot Encoding 수행
-- 이후 모든 feature를 StandardScaler()를 이용하여 표준화함.
-- 최종적으로 295,753개의 테스트 샘플과 25개의 feature로 구성된 feature matrix를 생성함.
+- 이후 모든 feature를 StandardScaler()를 이용하여 표준화
+- 최종적으로 295,753개의 테스트 샘플과 25개의 feature로 구성된 feature matrix를 생성
 
 (2) KNN 기반 공간 구조 생성
 - 기존 최고 모델의 health_condition 예측값을 다음과 같이 숫자로 변환
@@ -32,7 +32,6 @@ nn = NearestNeighbors(
     n_jobs=-1
 )
 
-- 이를 통해 각 샘플이 feature 공간에서 어떤 샘플들과 가까운지를 파악하고, 해당 이웃들의 기존 모델 예측 label을 이용하여 지역적인 label 분포를 계산함
 
 
 (3) KNN Neighborhood Probability 생성
@@ -51,53 +50,29 @@ nn = NearestNeighbors(
 
 
 3-1. 주요 코드
-1. 최고 성능 제출 파일 자동 탐색
-submission_files = sorted(
-    submission_files,
-    key=lambda x: extract_score(x.name),
-    reverse=True
-)
-
-top_file = submission_files[0]
-top_score = extract_score(top_file.name)
-
-
-2. KNN 모델 생성 및 이웃 탐색
-nn = NearestNeighbors(
-    n_neighbors=15,
-    algorithm='auto',
-    n_jobs=-1
-)
-
+1. KNN 모델 생성 및 이웃 탐색
+nn = NearestNeighbors(n_neighbors=15, algorithm='auto', n_jobs=-1)
 nn.fit(X_test_scaled)
 
-distances, indices = nn.kneighbors(
-    X_test_scaled
-)
+distances, indices = nn.kneighbors(X_test_scaled)
 
 
+2. KNN 기반 확률 생성 및 기존 예측과 KNN 확률의 Blending
+for i in range(N):
+    neighbors = indices[i]
+    neighbor_labels = y_hard[neighbors]
+    
+    counts = np.bincount(neighbor_labels, minlength=3)
+    knn_probs[i] = counts / np.sum(counts)
 
-3. KNN 기반 확률 생성
-counts = np.bincount(
-    neighbor_labels,
-    minlength=3
-)
+y_one_hot = np.zeros((N, 3))
+y_one_hot[np.arange(N), y_hard] = 1.0
 
-knn_probs[i] = counts / np.sum(counts)
+blend_weight_top = 0.85
+blend_weight_knn = 0.15
 
-
-
-4. 기존 예측과 KNN 확률의 Blending
-blended_probs = (
-    y_one_hot * 0.85
-    + knn_probs * 0.15
-)
-
-final_preds = np.argmax(
-    blended_probs,
-    axis=1
-)
-
+blended_probs = (y_one_hot * blend_weight_top) + (knn_probs * blend_weight_knn)
+final_preds = np.argmax(blended_probs, axis=1)
 
 
 4. 새롭게 알게 된 내용 / 어려운 내용 / 배울 점
